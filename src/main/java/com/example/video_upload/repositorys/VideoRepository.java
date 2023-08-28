@@ -9,6 +9,7 @@ import java.util.List;
 
 @Repository
 public interface VideoRepository extends JpaRepository <Video,Long>{
-    Video findByHash(String hash);
     List<Video> getVideoByUser(User user);
+
+    long countByHash(String hash);
 }

@@ -29,7 +29,7 @@ public class UserService {
         List<Video> videosByUser = videoRepository.getVideoByUser(user);
         for (Video video:
              videosByUser) {
-            if(video.getId()==id)return  true;
+            if(video.getId().equals(id))return  true;
         }
         return false;
     }
@@ -56,9 +56,5 @@ public class UserService {
 
 
         return userRepository.getUserByToken(tokenRepository.getTokenByAccessToken(token));
-    }
-
-    public List<User> getAllUsers() {
-        return userRepository.findAll();
     }
 }

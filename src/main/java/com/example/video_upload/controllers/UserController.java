@@ -3,12 +3,13 @@ package com.example.video_upload.controllers;
 
 import com.example.video_upload.entity.User;
 import com.example.video_upload.entity.Video;
-import com.example.video_upload.helper.VideoUploadInfo;
+import com.example.video_upload.entity.VideoDownload;
 import com.example.video_upload.payload.request.DownlRequest;
 import com.example.video_upload.payload.request.UserRequest;
 import com.example.video_upload.payload.response.MessageResponse;
 import com.example.video_upload.services.TokenService;
 import com.example.video_upload.services.UserService;
+import com.example.video_upload.services.VideoDownloadService;
 import com.example.video_upload.services.VideoService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
@@ -23,13 +24,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 @RestController
 
@@ -38,15 +37,17 @@ public class UserController {
     private final UserService userService;
     private final VideoService videoService;
     private final TokenService tokenService;
+    private final VideoDownloadService videoDownloadService;
     private final ConcurrentHashMap<Long, AtomicInteger> userConcurrentUploads = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, VideoUploadInfo> videoUploads = new ConcurrentHashMap<>();
+    private  final Map<Long, Integer> UPLOAD_PROGRESS = new ConcurrentHashMap<>();
     @Value("${video.directory}")
     private String videoDirectory;
 
-    public UserController(UserService userService, VideoService videoService, TokenService tokenService) {
+    public UserController(UserService userService, VideoService videoService, TokenService tokenService, VideoDownloadService videoDownloadService) {
         this.userService = userService;
         this.videoService = videoService;
         this.tokenService = tokenService;
+        this.videoDownloadService = videoDownloadService;
     }
 
     private void cleanupUserUploads() {
@@ -54,8 +55,8 @@ public class UserController {
     }
     @PostMapping("/addvideo")
     public ResponseEntity<Object> addVideo(
-            @RequestParam("videoFile") MultipartFile videoFile,
-            @RequestParam("accessToken") String token) {
+                                           @RequestParam("videoFile") MultipartFile videoFile,
+                                           @RequestParam("accessToken") String token) {
         if (tokenService.getTokenByAccessToken(token)==null) return  ResponseEntity.badRequest().body(new MessageResponse("Log in again"));
         User user = userService.getUserByToken(token);
 
@@ -72,8 +73,14 @@ public class UserController {
             if (userUploads.get() > 2)
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse("You can only upload 2 videos at a time"));
 
-            videoService.saveVideo(videoFile, user);
 
+            VideoDownload videoDownload=new VideoDownload();
+            videoDownload.setUsername(user.getUsername());
+            videoDownload.setProgress(0);
+            videoDownload.setVideoName(videoFile.getName());
+            videoDownloadService.save(videoDownload);
+            videoService.saveVideo(videoFile, user,videoDownload);
+            videoDownloadService.delete(videoDownload);
             } catch (NoSuchAlgorithmException | IOException e) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new MessageResponse("Failed to upload video"));
             } finally {
@@ -121,21 +128,12 @@ public class UserController {
     @GetMapping("/admin")
     public ResponseEntity<Object> admin(@RequestParam("accessToken") String accessToken) {
         String adminToken = "12345678"; // преполагается ,что у админа свой токен аутентификации
-        if (!adminToken.equals(accessToken)) {
-            return new ResponseEntity<>("Invalid access token", HttpStatus.UNAUTHORIZED);
+        if (adminToken.equals(accessToken)) {
+
+            List<VideoDownload> info=videoDownloadService.getAll();
+            return ResponseEntity.ok().body(info);
+        } else {
+            return ResponseEntity.badRequest().body(new MessageResponse("Access denied"));
         }
-
-        List<Map<String, Object>> uploads = videoUploads.entrySet().stream().map(entry -> {
-            VideoUploadInfo info = entry.getValue();
-            Map<String, Object> uploadData = new HashMap<>();
-            uploadData.put("id", entry.getKey());
-            uploadData.put("username", info.getUsername());
-            uploadData.put("videoName", info.getVideoName());
-            uploadData.put("progress", info.getProgress());
-            return uploadData;
-        }).collect(Collectors.toList());
-
-        return ResponseEntity.ok(uploads);
     }
-
 }

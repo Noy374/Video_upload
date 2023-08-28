@@ -3,7 +3,6 @@ package com.example.video_upload.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
-import lombok.ToString;
 
 @Entity
 @Data
@@ -23,7 +22,5 @@ public class Video {
     private User user;
     @JsonIgnore
     private String hash;
-
-    private String loadingStatus="Download start";
 
 }
